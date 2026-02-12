@@ -1,6 +1,8 @@
-const CACHE_NAME = 'family-tree-v15';
+const CACHE_NAME = 'family-tree-v16';
 const urlsToCache = [
   './index.html',
+  './style.css',
+  './script.js',
   './manifest.json',
   './family_data.csv',
   './photo.json'
