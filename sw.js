@@ -1,4 +1,4 @@
-const CACHE_NAME = 'family-tree-v14';
+const CACHE_NAME = 'family-tree-v15';
 const urlsToCache = [
   './index.html',
   './manifest.json',

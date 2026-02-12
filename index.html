@@ -199,6 +199,7 @@
             object-fit: cover;
             border-radius: 50%;
             z-index: 2;
+            pointer-events: none;
         }
 
         .member-name {
@@ -877,6 +878,7 @@
         let scrollLeft = 0;
         let scrollTop = 0;
         let suppressToggleOnce = false;
+        let hasMoved = false;
         let longPressTimer = null;
         let longPressActive = false;
         const LONG_PRESS_MS = 550;
@@ -892,6 +894,7 @@
             slider.style.userSelect = 'none';
             startX = e.clientX;
             startY = e.clientY;
+            hasMoved = false;
             scrollLeft = slider.scrollLeft;
             scrollTop = slider.scrollTop;
         });
@@ -901,6 +904,7 @@
             e.preventDefault();
             const walkX = e.clientX - startX;
             const walkY = e.clientY - startY;
+            if (Math.abs(walkX) > 5 || Math.abs(walkY) > 5) hasMoved = true;
             slider.scrollLeft = scrollLeft - walkX;
             slider.scrollTop = scrollTop - walkY;
         });
@@ -918,42 +922,6 @@
 
         slider.addEventListener('pointerup', endDrag);
         slider.addEventListener('pointercancel', endDrag);
-
-        // Touch fallback for browsers where Pointer Events drag is unreliable.
-        let touchDragging = false;
-        let touchStartX = 0;
-        let touchStartY = 0;
-        let touchScrollLeft = 0;
-        let touchScrollTop = 0;
-
-        slider.addEventListener('touchstart', (e) => {
-            if (e.touches.length !== 1) return;
-            if (e.target.closest('.toggle-btn') || e.target.closest('.search-box')) return;
-
-            touchDragging = true;
-            touchStartX = e.touches[0].clientX;
-            touchStartY = e.touches[0].clientY;
-            touchScrollLeft = slider.scrollLeft;
-            touchScrollTop = slider.scrollTop;
-        }, { passive: true });
-
-        slider.addEventListener('touchmove', (e) => {
-            if (!touchDragging || e.touches.length !== 1) return;
-
-            const walkX = e.touches[0].clientX - touchStartX;
-            const walkY = e.touches[0].clientY - touchStartY;
-            slider.scrollLeft = touchScrollLeft - walkX;
-            slider.scrollTop = touchScrollTop - walkY;
-            e.preventDefault();
-        }, { passive: false });
-
-        slider.addEventListener('touchend', () => {
-            touchDragging = false;
-        });
-
-        slider.addEventListener('touchcancel', () => {
-            touchDragging = false;
-        });
 
         function startLongPress(target, clientX, clientY) {
             clearTimeout(longPressTimer);
@@ -999,6 +967,10 @@
                     longPressActive = false;
                     return;
                 }
+            }
+            if (hasMoved) {
+                hasMoved = false;
+                return;
             }
             originalToggleNode(id);
         };
