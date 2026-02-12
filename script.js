@@ -241,37 +241,16 @@ function centerNodeFamily(id) {
     const nodeEl = document.getElementById(`node-${id}`);
     if (!wrapper || !nodeEl) return;
 
+    // Target the specific content container (Person + Spouse), ignoring the children list (<ul>)
+    const contentEl = nodeEl.querySelector('.node-container');
+    if (!contentEl) return;
+
     const wrapperRect = wrapper.getBoundingClientRect();
-    const nodeRect = nodeEl.getBoundingClientRect();
+    const contentRect = contentEl.getBoundingClientRect();
 
-    let left = nodeRect.left;
-    let right = nodeRect.right;
-    let top = nodeRect.top;
-    let bottom = nodeRect.bottom;
-
-    const directChildrenList = nodeEl.querySelector(':scope > ul');
-    if (directChildrenList && directChildrenList.offsetHeight > 0) {
-        const childrenRect = directChildrenList.getBoundingClientRect();
-        left = Math.min(left, childrenRect.left);
-        right = Math.max(right, childrenRect.right);
-        top = Math.min(top, childrenRect.top);
-        bottom = Math.max(bottom, childrenRect.bottom);
-    }
-
-    // Include spouse parent preview area if expanded
-    const miniRows = nodeEl.querySelectorAll('.mini-row');
-    miniRows.forEach(row => {
-        if (row.offsetHeight > 0) {
-            const rect = row.getBoundingClientRect();
-            left = Math.min(left, rect.left);
-            right = Math.max(right, rect.right);
-            top = Math.min(top, rect.top);
-            bottom = Math.max(bottom, rect.bottom);
-        }
-    });
-
-    const targetCenterX = (left + right) / 2;
-    const targetCenterY = (top + bottom) / 2;
+    // Calculate center based only on the person/couple block
+    const targetCenterX = contentRect.left + contentRect.width / 2;
+    const targetCenterY = contentRect.top + contentRect.height / 2;
 
     const nextLeft = wrapper.scrollLeft + (targetCenterX - wrapperRect.left) - (wrapper.clientWidth / 2);
     const nextTop = wrapper.scrollTop + (targetCenterY - wrapperRect.top) - (wrapper.clientHeight / 2);
@@ -351,7 +330,7 @@ function createTreeHTML(node) {
                     ? `<div class="mini-row">
                         ${parentNodes.map(p => `
                             <div class="mini-parent"
-                                onclick="event.stopPropagation(); locateNode('${p.id}'); centerNodeFamily('${p.id}')"
+                                 onclick="event.stopPropagation(); locateNode('${p.id}')"
                                  onmousedown="event.stopPropagation()">
                                 <div class="mini-circle">${getInitial(p.name)}</div>
                                 <div class="mini-name">${formatName(p.name)}</div>
@@ -563,15 +542,18 @@ function focusNode(foundId) {
     expandAncestors(dataMap[foundId]);
     renderTree(rootNodes);
 
-    setTimeout(() => {
-        const element = document.getElementById(`node-${foundId}`);
-                if (element) {
-                    document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
-                    element.classList.add('highlight');
-                    centerNodeFamily(foundId);
-                }
-            }, 100);
-        }
+    // Use requestAnimationFrame to ensure DOM update is processed
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            const element = document.getElementById(`node-${foundId}`);
+            if (element) {
+                document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
+                element.classList.add('highlight');
+                centerNodeFamily(foundId);
+            }
+        }, 200);
+    });
+}
 
 function searchNode(name) {
     if (!name) return;
@@ -599,6 +581,9 @@ function searchNode(name) {
 
 function locateNode(id) {
     if (!dataMap[id]) return;
+    // If the target is not currently rendered (fully collapsed elsewhere),
+    // open its own node as well to avoid centering into empty space.
+    dataMap[id].collapsed = false;
     focusNode(id);
 }
 

@@ -1,6 +1,6 @@
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f0f2f5;
+    background-color: #ffffff;
     text-align: center;
     margin: 0;
     padding: 0;
@@ -173,24 +173,28 @@ input[type="file"] {
 }
 
 .welcome-banner {
-    background: #e8f4fd;
-    color: #2c3e50;
-    padding: 8px 15px;
-    font-size: 0.85rem;
+    background: #fff3cd;
+    color: #856404;
+    padding: 8px 20px;
+    font-size: 0.9rem;
     text-align: center;
-    border-bottom: 1px solid #d0e1f5;
+    border: 1px solid #ffeeba;
+    border-radius: 50px;
     position: fixed;
-    top: 60px;
-    left: 0;
-    right: 0;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+    max-width: 90%;
     z-index: 998;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .tree-wrapper {
     width: 100vw;
     height: 100vh;
     overflow: auto;
-    padding-top: 100px; /* Header + Welcome Banner space */
+    padding-top: 130px; /* Header + Welcome Banner space */
     box-sizing: border-box;
     cursor: grab;
     touch-action: pan-x pan-y;
@@ -233,7 +237,7 @@ input[type="file"] {
 .tree li::after { right: auto; left: 50%; border-left: 2px solid #ccc; }
 .tree li:only-child::after, .tree li:only-child::before { display: none; }
 .tree li:only-child { padding-top: 0; }
-.tree li:first-child::before, .tree li:last-child::after { border: 0 none; }
+.tree li:first-child::before, .tree li:last-child::after { border: none; }
 .tree li:last-child::before { border-right: 2px solid #ccc; border-radius: 0 5px 0 0; }
 .tree li:first-child::after { border-radius: 5px 0 0 0; }
 .tree ul ul::before {
@@ -522,7 +526,7 @@ input[type="file"] {
 
 @media (max-width: 600px) {
     .header { padding: 0 10px; }
-    .tree-wrapper { padding-top: 110px; }
+    .tree-wrapper { padding-top: 130px; }
     .tree { padding: 16px 8px; }
     .tree li { padding: 14px 12px 0 12px; }
     .tree ul { padding-top: 14px; }

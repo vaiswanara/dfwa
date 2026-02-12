@@ -1,4 +1,4 @@
-const CACHE_NAME = 'family-tree-v16';
+const CACHE_NAME = 'family-tree-v23';
 const urlsToCache = [
   './index.html',
   './style.css',
