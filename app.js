@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let tree = null; // Holds the FamilyTree.js instance
     const peopleMap = new Map(); // For fast person lookup by ID
     const childrenMap = new Map(); // For fast children lookup by parent ID
+    const genderMap = new Map(); // For fast gender lookup by ID
     let PEOPLE = []; // Will hold the family data fetched from JSON
     let suppressNextClick = false;
     let longPressTimer = null;
@@ -67,6 +68,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const personShareBtn = document.getElementById('person-share-btn');
     let activeModalPersonId = null;
     let activePersonId = null;  // Currently centered person in the tree (used by profile button)
+    const relationshipModalOverlay = document.getElementById('relationship-modal-overlay');
+    const relationshipModalBody = document.getElementById('relationship-modal-body');
+    const relationshipModalClose = document.getElementById('relationship-modal-close');
+    let HOME_PERSON_ID = null;
 
     // --- PWA Install Logic ---
     const installItem = document.getElementById('install-item');
@@ -278,6 +283,39 @@ document.addEventListener('DOMContentLoaded', () => {
             if (person.fid) addChild(person.fid, person.id);
             if (person.mid) addChild(person.mid, person.id);
         });
+
+        // --- Infer Genders ---
+        // Pass 1: from parenthood
+        // This pass infers gender from parental roles but should NOT overwrite
+        // explicit gender data already loaded from persons.json.
+        PEOPLE.forEach(person => {
+            if (person.fid && person.fid !== "" && !genderMap.has(person.fid)) {
+                genderMap.set(person.fid, 'M');
+            }
+            if (person.mid && person.mid !== "" && !genderMap.has(person.mid)) {
+                genderMap.set(person.mid, 'F');
+            }
+        });
+
+        // Pass 2: from partnership (if one partner's gender is known)
+        // Run a few times to propagate gender info
+        for (let i = 0; i < 5; i++) {
+            PEOPLE.forEach(person => {
+                if (person.pids && person.pids.length > 0) {
+                    const p1_id = person.id;
+                    // Iterate over all partners
+                    person.pids.forEach(p2_id => {
+                        if (!peopleMap.has(p2_id)) return;
+
+                        const p1_gender = genderMap.get(p1_id);
+                        const p2_gender = genderMap.get(p2_id);
+
+                        if (p1_gender && !p2_gender) genderMap.set(p2_id, p1_gender === 'M' ? 'F' : 'M');
+                        if (!p1_gender && p2_gender) genderMap.set(p1_id, p2_gender === 'M' ? 'F' : 'M');
+                    });
+                }
+            });
+        }
         // console.timeEnd('buildLookups');
     }
 
@@ -409,6 +447,181 @@ document.addEventListener('DOMContentLoaded', () => {
 
             return node;
         });
+    }
+
+    function getAncestors(id) {
+        let ancestors = {};
+        let queue = [{ id: id, depth: 0 }];
+        let visited = new Set();
+
+        while (queue.length > 0) {
+            let current = queue.shift();
+            if (visited.has(current.id)) continue;
+            visited.add(current.id);
+
+            let person = peopleMap.get(current.id);
+            if (!person) continue;
+
+            ancestors[current.id] = current.depth;
+
+            if (person.fid)
+                queue.push({ id: person.fid, depth: current.depth + 1 });
+
+            if (person.mid)
+                queue.push({ id: person.mid, depth: current.depth + 1 });
+        }
+        return ancestors;
+    }
+
+    function getGender(personId) {
+        return genderMap.get(personId) || 'U'; // U for Unknown
+    }
+
+    function findRelationship(id1, id2) {
+        if(!id1 || !id2) return "Unknown";
+        if(id1 === id2) return "Self";
+
+        const person1 = peopleMap.get(id1);
+        if (person1 && person1.pids && person1.pids.includes(id2)) {
+            const gender2 = getGender(id2);
+            if (gender2 === 'M') return "Bhartha (Husband)";
+            if (gender2 === 'F') return "Bharya (Wife)";
+            return "Spouse";
+        }
+
+        let a1 = getAncestors(id1);
+        let a2 = getAncestors(id2);
+
+        let bestAncestor = null;
+        let bestDistance = Infinity;
+
+        for(let anc in a1){
+            if(a2[anc] !== undefined){
+                let dist = a1[anc] + a2[anc];
+                if(dist < bestDistance){
+                    bestDistance = dist;
+                    bestAncestor = anc;
+                }
+            }
+        }
+
+        if (!bestAncestor) return "No direct blood relation";
+
+        let pathUp = getAncestorPath(id1, bestAncestor);
+        let pathDown = getDescendantPath(bestAncestor, id2);
+
+        return interpretHinduRelation(id1, id2, pathUp, pathDown);
+    }
+
+    function getAncestorPath(startId, targetAncestor){
+        let queue = [{id:startId, path:[startId]}];
+        let visited = new Set();
+
+        while(queue.length){
+            let current = queue.shift();
+            if(visited.has(current.id)) continue;
+            visited.add(current.id);
+
+            if(current.id === targetAncestor)
+                return current.path;
+
+            let p = peopleMap.get(current.id);
+            if(!p) continue;
+
+            if(p.fid) queue.push({id:p.fid, path:[...current.path, p.fid]});
+            if(p.mid) queue.push({id:p.mid, path:[...current.path, p.mid]});
+        }
+        return null;
+    }
+
+    function getDescendantPath(ancestorId, targetId){
+        let queue = [{id:ancestorId, path:[ancestorId]}];
+        let visited = new Set();
+
+        while(queue.length){
+            let current = queue.shift();
+            if(visited.has(current.id)) continue;
+            visited.add(current.id);
+
+            if(current.id === targetId)
+                return current.path;
+
+            let children = childrenMap.get(current.id) || [];
+            children.forEach(child=>{
+                queue.push({id:child, path:[...current.path, child]});
+            });
+        }
+        return null;
+    }
+
+    function interpretHinduRelation(homeId, targetId, up, down) {
+        if (!up || !down) return "Bandhuvu (Relative)";
+
+        let u = up.length - 1;
+        let d = down.length - 1;
+
+        const homePerson = peopleMap.get(homeId);
+        const targetPerson = peopleMap.get(targetId);
+        if (!homePerson || !targetPerson) return "Unknown";
+
+        const targetGender = getGender(targetId);
+
+        // Direct line (ancestor)
+        if (d === 0) {
+            if (u === 1) { // Parent
+                if (targetId === homePerson.fid) return "Tandri (Father)";
+                if (targetId === homePerson.mid) return "Talli (Mother)";
+                return "Parent";
+            }
+            if (u === 2) { // Grandparent
+                const parentId = up[1];
+                if (parentId === homePerson.fid) { // Paternal
+                    return targetGender === 'M' ? "Tata (Paternal Grandfather)" : "Nayanamma (Paternal Grandmother)";
+                } else { // Maternal
+                    return targetGender === 'M' ? "Tata (Maternal Grandfather)" : "Ammamma (Maternal Grandmother)";
+                }
+            }
+            if (u === 3) return "Great Grandparent";
+            return "Ancestor";
+        }
+
+        // Direct line (descendant)
+        if (u === 0) {
+            if (d === 1) return targetGender === 'M' ? "Koduku (Son)" : (targetGender === 'F' ? "Kumarthe (Daughter)" : "Child");
+            if (d === 2) return targetGender === 'M' ? "Manavadu (Grandson)" : (targetGender === 'F' ? "Manavaralu (Granddaughter)" : "Grandchild");
+            if (d === 3) return targetGender === 'M' ? "Muni Manavadu (Great Grandson)" : (targetGender === 'F' ? "Muni Manavaralu (Great Granddaughter)" : "Great Grandchild");
+            return "Descendant";
+        }
+
+        // Siblings
+        if (u === 1 && d === 1) {
+            return targetGender === 'M' ? "Sodharudu (Brother)" : "Sodari (Sister)";
+        }
+
+        // Uncle / Aunt
+        if (u === 2 && d === 1) {
+            const parentId = up[1]; // home person's parent
+            if (parentId === homePerson.fid) { // Paternal side
+                if (targetGender === 'M') return "Pedananna / Chinnananna (Paternal Uncle)";
+                if (targetGender === 'F') return "Atta (Paternal Aunt)";
+            } else if (parentId === homePerson.mid) { // Maternal side
+                if (targetGender === 'M') return "Mama (Maternal Uncle)";
+                if (targetGender === 'F') return "Peddamma / Pinnamma (Maternal Aunt)";
+            }
+            return "Uncle / Aunt";
+        }
+
+        // Nephew / Niece
+        if (u === 1 && d === 2) {
+            return targetGender === 'M' ? "Menalludu (Nephew)" : "Menakodalu (Niece)";
+        }
+
+        // Cousins
+        if (u === 2 && d === 2) {
+            return "Cousin";
+        }
+
+        return "Bandhuvu (Relative)";
     }
 
     // =================================================================================
@@ -647,7 +860,8 @@ document.addEventListener('DOMContentLoaded', () => {
             rowHtml("Siblings", collectNames(siblings)),
             rowHtml("Address", p.Address || ""),
             rowHtml("Email", p.email ? `<a href="mailto:${p.email}" style="color: #039BE5; text-decoration: none;">${p.email}</a>` : ""),
-            rowHtml("Phone", p.phone ? `<a href="tel:${p.phone}" style="color: #039BE5; text-decoration: none;">${p.phone}</a>` : "")
+            rowHtml("Phone", p.phone ? `<a href="tel:${p.phone}" style="color: #039BE5; text-decoration: none;">${p.phone}</a>` : ""),
+            rowHtml("Note", p.note || "")
         ];
         personModalBody.innerHTML = rows.join("");
 
@@ -702,6 +916,19 @@ document.addEventListener('DOMContentLoaded', () => {
             alert(`Share functionality is not supported on this browser.\n\nName: ${p.name}\nID: ${p.id}`);
         }
     });
+
+    const relationBtn = document.getElementById('relation-btn');
+    if(relationBtn){
+        relationBtn.addEventListener('click', () => {
+            if(!activeModalPersonId || !HOME_PERSON_ID) return;
+
+            const relation = findRelationship(HOME_PERSON_ID, activeModalPersonId);
+
+            alert(
+                "Relationship with Home Person:\n\n" + relation
+            );
+        });
+    }
 
     function findNodeIdFromTarget(target) {
         let el = target;
@@ -771,6 +998,7 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     function drawTree(centerId) {
         activePersonId = centerId;
+        HOME_PERSON_ID = centerId;
         const familyData = getFamilySet(centerId);
         console.log(`Drawing tree for ${centerId}. Nodes count: ${familyData.length}`);
         const mobile = isMobileViewport();
@@ -926,10 +1154,26 @@ document.addEventListener('DOMContentLoaded', () => {
         verticalAlign: 'middle'
     });
 
-    // Insert Home then Profile before the search input field
+    // Relationship button: find relationship between active person and home person
+    const headerRelationshipBtn = document.createElement('button');
+    headerRelationshipBtn.innerHTML = '↔️';
+    headerRelationshipBtn.title = "Find relationship to Home Person";
+    Object.assign(headerRelationshipBtn.style, {
+        marginRight: '8px',
+        padding: '6px 10px',
+        fontSize: '18px',
+        cursor: 'pointer',
+        backgroundColor: '#fff',
+        border: '1px solid #ccc',
+        borderRadius: '4px',
+        verticalAlign: 'middle'
+    });
+
+    // Insert Home, Profile, and Relationship buttons before the search input field
     if (searchInput && searchInput.parentNode) {
         searchInput.parentNode.insertBefore(mainHomeBtn, searchInput);
         searchInput.parentNode.insertBefore(profileBtn, searchInput);
+        searchInput.parentNode.insertBefore(headerRelationshipBtn, searchInput);
     }
 
     // Add click listener to reset tree to Home Person
@@ -950,6 +1194,46 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Add click listener for the new header relationship button
+    headerRelationshipBtn.addEventListener('click', () => {
+        const homeId = getHomePersonId();
+        const centeredId = activePersonId;
+
+        if (!homeId || !centeredId) {
+            alert("Could not determine relationship. A home person and an active person must be selected.");
+            return;
+        }
+
+        const homePerson = peopleMap.get(homeId);
+        const centeredPerson = peopleMap.get(centeredId);
+
+        if (!homePerson || !centeredPerson) {
+            alert("Person data not found.");
+            return;
+        }
+
+        let relationshipHtml = '';
+        if (homeId === centeredId) {
+            relationshipHtml = `
+                <p style="margin-bottom: 10px;">This is the currently set Home Person:</p>
+                <strong style="font-size: 1.2em; color: var(--primary-color);">${homePerson.name}</strong>
+            `;
+        } else {
+            const relation = findRelationship(homeId, centeredId);
+            relationshipHtml = `
+                <p style="margin:0 0 5px;">Relationship between:</p>
+                <strong style="font-size: 1.1em; display: block; margin-bottom: 15px;">${homePerson.name} (Home)</strong>
+                <span style="font-size: 1.5em; color: #888;">&</span>
+                <strong style="font-size: 1.1em; display: block; margin-top: 15px;">${centeredPerson.name} (Selected)</strong>
+                <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+                <p style="font-size: 1.4em; color: var(--primary-color); font-weight: bold; margin:0;">${relation}</p>
+            `;
+        }
+
+        relationshipModalBody.innerHTML = relationshipHtml;
+        relationshipModalOverlay.style.display = 'flex';
+    });
+
     // Add event listeners for the search input
     searchInput.addEventListener('input', handleSearch);
     searchInput.addEventListener('focus', handleSearch); // Show suggestions when focused
@@ -960,6 +1244,20 @@ document.addEventListener('DOMContentLoaded', () => {
             clearSuggestions();
         }
     });
+
+    // --- Relationship Modal Close Logic ---
+    if (relationshipModalClose) {
+        relationshipModalClose.addEventListener('click', () => {
+            relationshipModalOverlay.style.display = 'none';
+        });
+    }
+    if (relationshipModalOverlay) {
+        relationshipModalOverlay.addEventListener('click', (e) => {
+            if (e.target === relationshipModalOverlay) {
+                relationshipModalOverlay.style.display = 'none';
+            }
+        });
+    }
 
     // =================================================================================
     // SECTION 5.5: NEWS / WELCOME FEATURE
@@ -1040,13 +1338,106 @@ document.addEventListener('DOMContentLoaded', () => {
         page.style.display = 'flex';
     };
 
+    /**
+     * =================================================================================
+     * SECTION 5.7: NEW DATABASE ADAPTER
+     * =================================================================================
+     * This function loads data from the new three-file format (persons, families, places)
+     * and transforms it into the single `PEOPLE` array format that the rest of the
+     * application expects.
+     */
+    async function loadNewDatabase() {
+        console.log("Loading data from new database format...");
+        const [personsRes, familiesRes, placesRes, contactsRes] = await Promise.all([
+            fetch('json_data/persons.json'),
+            fetch('json_data/families.json'),
+            fetch('json_data/places.json'),
+            fetch('json_data/contacts.json')
+        ]);
+
+        const persons = await personsRes.json();
+        const families = await familiesRes.json();
+        const places = await placesRes.json();
+        const contacts = await contactsRes.json();
+
+        // Create a map for easy lookup of contact info
+        const contactsMap = new Map();
+        for (const contact of contacts) {
+            contactsMap.set(contact.person_id, contact);
+        }
+
+        const newPeopleMap = new Map();
+
+        // 1. Create initial person objects from persons.json
+        for (const p of persons) {
+            const givenName = (p.given_name || '').trim();
+            const surname = (p.surname || '').trim();
+            let fullName = (givenName + ' ' + surname).trim();
+            if (!fullName) {
+                fullName = p.person_id;
+            }
+
+            // Populate genderMap with explicit 'sex' data from the new database.
+            if (p.sex && (p.sex === 'M' || p.sex === 'F')) {
+                genderMap.set(p.person_id, p.sex);
+            }
+
+            const contactInfo = contactsMap.get(p.person_id) || {};
+
+            const birthPlace = p.birth_place_id && places[p.birth_place_id] ? places[p.birth_place_id].place : '';
+
+            newPeopleMap.set(p.person_id, {
+                id: p.person_id,
+                name: fullName,
+                fid: "",
+                mid: "",
+                pids: [],
+                Birth: p.birth_date || "",
+                Death: "", // Not available in new format
+                Address: birthPlace,
+                email: contactInfo.email || "",
+                phone: contactInfo.phone || "",
+                note: contactInfo.note || "",
+                image_url: "" // Populated later by photos.json
+            });
+        }
+
+        // 2. Process families.json to build relationships (spouses, parents, children)
+        for (const family of families) {
+            const husbandId = family.husband_id;
+            const wifeId = family.wife_id;
+
+            // Link spouses
+            if (husbandId && wifeId && newPeopleMap.has(husbandId) && newPeopleMap.has(wifeId)) {
+                const husband = newPeopleMap.get(husbandId);
+                const wife = newPeopleMap.get(wifeId);
+                if (!husband.pids.includes(wifeId)) husband.pids.push(wifeId);
+                if (!wife.pids.includes(husbandId)) wife.pids.push(husbandId);
+            }
+
+            // Link children to parents
+            if (family.children && Array.isArray(family.children)) {
+                for (const childId of family.children) {
+                    if (newPeopleMap.has(childId)) {
+                        const child = newPeopleMap.get(childId);
+                        if (husbandId) child.fid = husbandId;
+                        if (wifeId) child.mid = wifeId;
+                    }
+                }
+            }
+        }
+
+        console.log("Data transformation complete.");
+        return Array.from(newPeopleMap.values());
+    }
+
     // =================================================================================
     // SECTION 6: INITIAL APPLICATION START
     // =================================================================================
     
     // 1. Fetch Family Data, then Photos, then Draw Tree
-    fetch('family_data.json')
-        .then(response => response.json())
+    // 1. Fetch and adapt all data, then draw the tree
+    loadNewDatabase()
         .then(data => {
             PEOPLE = data;
             buildLookups();

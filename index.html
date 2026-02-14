@@ -177,7 +177,21 @@
             </div>
             <div class="modal-footer">
                 <button id="person-home-btn" class="btn btn-outline">Set as Home</button>
+                <button id="relation-btn" class="btn btn-primary">Relationship</button>
                 <button id="person-share-btn" class="btn btn-primary">Share Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Relationship Details Modal -->
+    <div id="relationship-modal-overlay" aria-hidden="true" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 3000; justify-content: center; align-items: center; backdrop-filter: blur(2px);">
+        <div id="relationship-modal" style="background: #fff; width: 90%; max-width: 400px; border-radius: 12px; box-shadow: 0 15px 35px rgba(0,0,0,0.2); animation: slideUp 0.3s ease;">
+            <div class="modal-header">
+                <h3 style="margin: 0; font-size: 18px;">Relationship</h3>
+                <button id="relationship-modal-close" class="modal-close">&times;</button>
+            </div>
+            <div id="relationship-modal-body" style="padding: 20px 25px; line-height: 1.6; text-align: center;">
+                <!-- Content injected by app.js -->
             </div>
         </div>
     </div>
