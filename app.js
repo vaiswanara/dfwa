@@ -52,6 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let longPressStartY = 0;
     const LONG_PRESS_MS = 550;
     const MOVE_CANCEL_PX = 8;
+    const MALE_ICON_SVG = '<svg width="100%" height="100%" viewBox="0 0 24 24" fill="#4A90E2"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
+    const FEMALE_ICON_SVG = '<svg width="100%" height="100%" viewBox="0 0 24 24" fill="#E91E63"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
     
     const searchInput = document.getElementById('search-input');
     const searchSuggestions = document.getElementById('search-suggestions');
@@ -284,6 +286,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (person.mid) addChild(person.mid, person.id);
         });
 
+        // After populating, sort all children arrays by person ID to ensure consistent order.
+        for (const children of childrenMap.values()) {
+            // Default string sort is sufficient for IDs like "I0112", "I0113", etc.
+            children.sort();
+        }
+
         // --- Infer Genders ---
         // Pass 1: from parenthood
         // This pass infers gender from parental roles but should NOT overwrite
@@ -344,6 +352,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 nameWidth: 170, imgSize: 70, imgX: 55, imgY: 5
             };
 
+        const iconSize = cfg.radius * 1.5;
+        const iconX = cfg.cx - (iconSize / 2);
+        const iconY = cfg.cy - (iconSize / 2);
+
         FamilyTree.templates.circle = Object.assign({}, FamilyTree.templates.base);
         FamilyTree.templates.circle.size = [cfg.width, cfg.height];
         FamilyTree.templates.circle.node =
@@ -354,6 +366,8 @@ document.addEventListener('DOMContentLoaded', () => {
             `<text style="font-size: ${cfg.nameSize}px; font-weight: 600; fill: #000000; stroke: none;" fill="#000000" x="${cfg.cx}" y="${cfg.nameY}" text-anchor="middle" pointer-events="none" data-width="${cfg.nameWidth}">{val}</text>`;
         FamilyTree.templates.circle.img_0 =
             `<clipPath id="clip_id_{rand}"><circle cx="${cfg.cx}" cy="${cfg.cy}" r="${cfg.radius}"></circle></clipPath><image preserveAspectRatio="xMidYMid slice" clip-path="url(#clip_id_{rand})" xlink:href="{val}" x="${cfg.imgX}" y="${cfg.imgY}" width="${cfg.imgSize}" height="${cfg.imgSize}"></image><circle cx="${cfg.cx}" cy="${cfg.cy}" r="${cfg.radius}" fill="none" stroke="#4A90E2" stroke-width="2"></circle>`;
+        // New field for gender icons
+        FamilyTree.templates.circle.gender_icon = `<foreignObject x="${iconX}" y="${iconY}" width="${iconSize}" height="${iconSize}">{val}</foreignObject>`;
     }
 
     // =================================================================================
@@ -424,15 +438,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const fullName = (node.name || "").trim();
             const parts = fullName ? fullName.split(/\s+/) : [];
             const hasImage = !!(node.image_url && node.image_url.trim() !== "");
+            const gender = getGender(node.id);
 
-            if (hasImage) {
-                node._initials = "";
-            } else if (parts.length === 0) {
-                node._initials = "?";
-            } else if (parts.length === 1) {
-                node._initials = parts[0].charAt(0).toUpperCase();
-            } else {
-                node._initials = (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+            node.gender_icon_svg = ''; // new property for binding
+            node._initials = ''; // default to empty
+
+            if (!hasImage) {
+                if (gender === 'M') {
+                    node.gender_icon_svg = MALE_ICON_SVG;
+                } else if (gender === 'F') {
+                    node.gender_icon_svg = FEMALE_ICON_SVG;
+                } else { // 'U' or undefined
+                    if (parts.length === 0) {
+                        node._initials = "?";
+                    } else if (parts.length === 1) {
+                        node._initials = parts[0].charAt(0).toUpperCase();
+                    } else {
+                        node._initials = (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+                    }
+                }
             }
 
             // Keep multi-word first names intact and use only surname initial.
@@ -1094,7 +1118,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Bind to precomputed fields to avoid callback incompatibilities.
                 field_0: "_initials",
                 field_1: "_label",
-                img_0: "image_url", // The person's photo
+                img_0: "image_url",
+                gender_icon: "gender_icon_svg"
             },
             // The person to be initially displayed in the center
             nodeMouseClick: FamilyTree.action.none, // Disable default click action
