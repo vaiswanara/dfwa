@@ -15,7 +15,7 @@
  * =====================================================================================
  */
 
-const CACHE_NAME = 'family-tree-cache-v3.1';
+const CACHE_NAME = 'family-tree-cache-v3.6';
 
 // All the files and assets the app needs to function offline.
 const URLS_TO_CACHE = [
@@ -31,16 +31,6 @@ const URLS_TO_CACHE = [
     './welcome.json',
     './logo.png',
     'https://balkan.app/js/FamilyTree.js',
-    // --- App Icons ---
-    // IMPORTANT: You must create these icon files in the /icons/ directory.
-    './icons/icon-72x72.png',
-    './icons/icon-96x96.png',
-    './icons/icon-128x128.png',
-    './icons/icon-144x144.png',
-    './icons/icon-152x152.png',
-    './icons/icon-192x192.png',
-    './icons/icon-384x384.png',
-    './icons/icon-512x512.png'
 ];
 
 // =================================================================================

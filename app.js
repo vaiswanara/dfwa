@@ -137,13 +137,13 @@ document.addEventListener('DOMContentLoaded', () => {
             html = `
                 <div style="text-align: center; padding: 10px 0 20px;">
                     ${logoHtml}
-                    <h2 style="margin: 0 0 10px; color: #333; font-size: 22px;">Install DFWA App</h2>
+                    <h2 style="margin: 0 0 10px; color: #333; font-size: 22px;">Install Vamsha Vruksha App</h2>
                     <p style="color: #666; font-size: 14px; line-height: 1.5;">Install the app for a better experience, offline access, and full-screen mode.</p>
                 </div>
             `;
 
             if (deferredPrompt) {
-                html += `<button id="install-page-action-btn" class="install-android-btn">Install for Android</button>`;
+                html += `<button id="install-page-action-btn" class="install-android-btn">Install on Android</button>`;
             } else {
                 html += `
                     <div class="step">
@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             html += `
                 <div class="install-why-box">
-                    <h3>⭐ Why install DFWA?</h3>
+                    <h3>⭐ Why install Vamsha Vruksha?</h3>
                     <ul>
                         <li>Opens instantly like a mobile app</li>
                         <li>Family tree in one tap</li>
@@ -905,28 +905,104 @@ document.addEventListener('DOMContentLoaded', () => {
     personShareBtn.addEventListener('click', () => {
         if (!activeModalPersonId) return;
         const p = peopleMap.get(activeModalPersonId);
-        const shareData = {
-            title: 'Family Tree Profile',
-            text: `Family Tree Profile: ${p.name} (ID: ${p.id})`,
-            url: window.location.href
+        if (!p) return;
+
+        // Helper to get names as a clean, comma-separated string
+        const collectNamesAsText = (ids) => {
+            if (!ids || ids.length === 0) return "Not available";
+            return ids.map(id => {
+                const person = peopleMap.get(id);
+                return person ? person.name : '';
+            }).filter(Boolean).join(', ') || "Not available";
         };
+
+        // --- Collect all details for sharing ---
+        const fullName = (p.name || "").trim() || "Unknown";
+        
+        const parents = [p.fid, p.mid].filter(Boolean);
+
+        const siblingSet = new Set();
+        if (p.fid && childrenMap.has(p.fid)) {
+            childrenMap.get(p.fid).forEach(id => siblingSet.add(id));
+        }
+        if (p.mid && childrenMap.has(p.mid)) {
+            childrenMap.get(p.mid).forEach(id => siblingSet.add(id));
+        }
+        siblingSet.delete(p.id);
+        const siblings = Array.from(siblingSet);
+
+        const spouses = Array.isArray(p.pids) ? p.pids : [];
+        const children = childrenMap.get(p.id) || [];
+
+        const birthFormatted = formatDate(p.Birth || "");
+        const age = getAgeFromBirth(p.Birth || "");
+        const birthWithAge = birthFormatted ? (birthFormatted + (age != null ? ` (Age: ${age})` : "")) : "Not available";
+
+        // --- Construct the text to share ---
+        let shareText = `*Vamsha Vruksha Profile*\n\n`;
+        shareText += `*Name:* ${fullName}\n`;
+        shareText += `*ID:* ${p.id}\n`;
+        shareText += `*Date of Birth:* ${birthWithAge}\n`;
+        shareText += `*Parents:* ${collectNamesAsText(parents)}\n`;
+        shareText += `*Spouse(s):* ${collectNamesAsText(spouses)}\n`;
+        shareText += `*Children:* ${collectNamesAsText(children)}\n`;
+        shareText += `*Siblings:* ${collectNamesAsText(siblings)}\n`;
+        if (p.Address && p.Address.trim()) shareText += `*Address:* ${p.Address.trim()}\n`;
+        if (p.email && p.email.trim()) shareText += `*Email:* ${p.email.trim()}\n`;
+        if (p.phone && p.phone.trim()) shareText += `*Phone:* ${p.phone.trim()}\n`;
+        if (p.note && p.note.trim()) shareText += `*Note:* ${p.note.trim()}\n`;
+        
+        shareText += `\nShared from the Vamsha Vruksha App.`;
+
+        const shareData = {
+            title: `Profile of ${fullName}`,
+            text: shareText
+        };
+
         if (navigator.share) {
             navigator.share(shareData).catch(console.error);
         } else {
-            alert(`Share functionality is not supported on this browser.\n\nName: ${p.name}\nID: ${p.id}`);
+            // Fallback for browsers that don't support navigator.share
+            alert(`Share functionality is not supported on this browser. Details:\n\n${shareText}`);
         }
     });
 
     const relationBtn = document.getElementById('relation-btn');
     if(relationBtn){
         relationBtn.addEventListener('click', () => {
-            if(!activeModalPersonId || !HOME_PERSON_ID) return;
+            const homeId = getHomePersonId();
+            if(!activeModalPersonId || !homeId) {
+                alert("Could not determine relationship. A home person must be set and the details box must show a person.");
+                return;
+            }
 
-            const relation = findRelationship(HOME_PERSON_ID, activeModalPersonId);
+            const homePerson = peopleMap.get(homeId);
+            const modalPerson = peopleMap.get(activeModalPersonId);
+            if (!homePerson || !modalPerson) {
+                alert("Person data not found.");
+                return;
+            }
 
-            alert(
-                "Relationship with Home Person:\n\n" + relation
-            );
+            let relationshipHtml = '';
+            if (homeId === activeModalPersonId) {
+                relationshipHtml = `
+                    <p style="margin-bottom: 10px;">This is the currently set Home Person:</p>
+                    <strong style="font-size: 1.2em; color: var(--primary-color);">${homePerson.name}</strong>
+                `;
+            } else {
+                const relation = findRelationship(homeId, activeModalPersonId);
+                relationshipHtml = `
+                    <p style="margin:0 0 5px;">Relationship between:</p>
+                    <strong style="font-size: 1.1em; display: block; margin-bottom: 15px;">${homePerson.name} (Home)</strong>
+                    <span style="font-size: 1.5em; color: #888;">&</span>
+                    <strong style="font-size: 1.1em; display: block; margin-top: 15px;">${modalPerson.name} (Profile)</strong>
+                    <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+                    <p style="font-size: 1.4em; color: var(--primary-color); font-weight: bold; margin:0;">${relation}</p>
+                `;
+            }
+
+            relationshipModalBody.innerHTML = relationshipHtml;
+            relationshipModalOverlay.style.display = 'flex';
         });
     }
 
